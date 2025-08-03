@@ -10,7 +10,7 @@ import java.util.*
 
 class AlarmAdapter(
     private val alarms: List<Alarm>,
-    private val onToggle: (Alarm) -> Unit // A function to handle the switch toggle
+    private val onToggle: (Alarm, Int) -> Unit // A function to handle the switch toggle
 ) : RecyclerView.Adapter<AlarmAdapter.AlarmViewHolder>() {
 
     // This class holds the views for each list item.
@@ -40,7 +40,7 @@ class AlarmAdapter(
         // Set a listener to handle when the user toggles the switch
         holder.switch.setOnCheckedChangeListener { _, isChecked ->
             alarm.isEnabled = isChecked
-            onToggle(alarm)
+            onToggle(alarm, position)
         }
     }
 }

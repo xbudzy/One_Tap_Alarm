@@ -1,9 +1,9 @@
 package com.example.onetapalarm // Make sure this matches your package name!
 
+import android.annotation.SuppressLint
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.app.TimePickerDialog
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -11,11 +11,15 @@ import android.os.Bundle
 import android.provider.Settings
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.edit
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.onetapalarm.databinding.ActivityMainBinding
 import com.google.android.material.snackbar.Snackbar
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import java.util.Calendar
 import kotlin.random.Random
+
 
 class MainActivity : AppCompatActivity() {
 
@@ -24,23 +28,26 @@ class MainActivity : AppCompatActivity() {
     private val alarms = mutableListOf<Alarm>()
     private lateinit var alarmManager: AlarmManager
 
+    private val gson = Gson()
+    private val prefsName = "AlarmAppPrefs"
+    private val alarmsKey = "alarms"
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
 
         setupRecyclerView()
+        loadAlarms()
 
-        // --- MODIFIED ---
         // This now calls our new permission-checking function first
         binding.addAlarmFab.setOnClickListener {
             checkPermissionsAndShowTimePicker()
         }
     }
 
-    // --- NEW FUNCTION ---
     // This function checks for the required permissions before showing the time picker.
     private fun checkPermissionsAndShowTimePicker() {
         // Check for notification permission first (for Android 13+)
@@ -73,12 +80,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupRecyclerView() {
-        alarmAdapter = AlarmAdapter(alarms) { alarm ->
+        alarmAdapter = AlarmAdapter(alarms) { alarm, position ->
             if (alarm.isEnabled) {
                 scheduleAlarm(alarm)
             } else {
                 cancelAlarm(alarm)
             }
+            saveAlarms()
+            alarmAdapter.notifyItemChanged(position)
         }
         binding.alarmRecyclerView.apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
@@ -103,9 +112,11 @@ class MainActivity : AppCompatActivity() {
 
                 alarms.add(newAlarm)
                 alarms.sortBy { it.hour * 60 + it.minute }
-                alarmAdapter.notifyDataSetChanged()
+                val newIndex = alarms.indexOf(newAlarm)
+                alarmAdapter.notifyItemInserted(newIndex)
 
                 scheduleAlarm(newAlarm)
+                saveAlarms()
             },
             hour,
             minute,
@@ -152,6 +163,31 @@ class MainActivity : AppCompatActivity() {
 
         if (pendingIntent != null) {
             alarmManager.cancel(pendingIntent)
+        }
+    }
+    // Converts the alarm list to a JSON string and saves it in SharedPreferences.
+    private fun saveAlarms() {
+        val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
+        val alarmsJson = gson.toJson(alarms)
+        prefs.edit {
+            putString(alarmsKey, alarmsJson)
+        }
+    }
+
+    // Loads the JSON string from SharedPreferences and converts it back to an alarm list.
+    private fun loadAlarms() {
+        val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
+        val alarmsJson = prefs.getString(alarmsKey, null)
+
+        if (alarmsJson != null) {
+            val type = object : TypeToken<MutableList<Alarm>>() {}.type
+            val loadedAlarms: MutableList<Alarm> = gson.fromJson(alarmsJson, type)
+
+            alarms.clear()
+            alarms.addAll(loadedAlarms)
+
+            @SuppressLint("NotifyDataSetChanged")
+            alarmAdapter.notifyDataSetChanged()
         }
     }
 }
